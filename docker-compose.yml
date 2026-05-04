@@ -11,6 +11,8 @@ services:
       - ./data:/data
     environment:
       NODE_ENV: production
+      # Always use the volume mount path; .env DATABASE_URL=file:./data/app.db is for local dev only.
+      DATABASE_URL: file:/data/app.db
       PORT: ${PORT:-8080}
       HOST: ${HOST:-0.0.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-info}

@@ -38,7 +38,8 @@ RUN pnpm --filter @wm-ddns/api deploy --prod --legacy /deploy/api
 FROM node:20-alpine AS runtime
 
 # tzdata so the TZ env var actually changes cron timezone behavior.
-RUN apk add --no-cache tini tzdata wget
+# su-exec: drop from root (entrypoint) to app after fixing /data permissions.
+RUN apk add --no-cache tini tzdata wget su-exec
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -56,18 +57,22 @@ COPY --from=build /app/apps/web/dist ./web/dist
 
 # The Fastify static handler resolves SPA assets relative to the API dist.
 # Move web/dist next to api/dist so server.ts's path probing finds it.
-RUN mkdir -p /app/apps/web && mv /app/web/dist /app/apps/web/dist \
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+ && mkdir -p /app/apps/web && mv /app/web/dist /app/apps/web/dist \
  && mkdir -p /data \
  && addgroup -S app && adduser -S app -G app \
- && chown -R app:app /app /data
+ && chown -R app:app /app /data \
+ && chmod +x /docker-entrypoint.sh
 
 VOLUME ["/data"]
 EXPOSE 8080
 
-USER app
+# Root only for entrypoint chown on /data; process runs as app (see docker-entrypoint.sh).
+USER root
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/healthz | grep -q ok || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/main.js"]
