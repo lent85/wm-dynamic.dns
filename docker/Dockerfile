@@ -32,7 +32,7 @@ RUN pnpm --filter @wm-ddns/shared build \
  && pnpm --filter @wm-ddns/web build
 
 # Prune to production-only deps for the api image.
-RUN pnpm --filter @wm-ddns/api deploy --prod /deploy/api
+RUN pnpm --filter @wm-ddns/api deploy --prod --legacy /deploy/api
 
 # ---- Stage 2: runtime -------------------------------------------------------
 FROM node:20-alpine AS runtime
