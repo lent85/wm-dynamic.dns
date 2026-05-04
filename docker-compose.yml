@@ -6,11 +6,13 @@ services:
     container_name: wm-ddns
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     volumes:
       - ./data:/data
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-8080}
+      HOST: ${HOST:-0.0.0.0}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-UTC}
       TRUST_PROXY: ${TRUST_PROXY:-false}
@@ -22,7 +24,7 @@ services:
       PUBLIC_IP_PROVIDERS: ${PUBLIC_IP_PROVIDERS:-https://api.ipify.org,https://ifconfig.co/ip,https://icanhazip.com}
       SELF_DETECT_INTERVAL_SEC: ${SELF_DETECT_INTERVAL_SEC:-300}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -q ok"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT:-8080}/healthz | grep -q ok"]
       interval: 30s
       timeout: 5s
       retries: 3
