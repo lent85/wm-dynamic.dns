@@ -1,0 +1,29 @@
+services:
+  wm-ddns:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: wm-ddns
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: ${TZ:-UTC}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY (64 hex chars) in .env}
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASS: ${ADMIN_PASS:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      PUBLIC_IP_PROVIDERS: ${PUBLIC_IP_PROVIDERS:-https://api.ipify.org,https://ifconfig.co/ip,https://icanhazip.com}
+      SELF_DETECT_INTERVAL_SEC: ${SELF_DETECT_INTERVAL_SEC:-300}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

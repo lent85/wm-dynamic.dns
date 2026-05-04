@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgb(15 23 42);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(51 65 85);
+    border-radius: 5px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(71 85 105);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium
+           transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2
+           focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-500;
+  }
+  .btn-secondary {
+    @apply btn bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-500;
+  }
+  .btn-ghost {
+    @apply btn text-slate-300 hover:bg-slate-800;
+  }
+  .input {
+    @apply w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100
+           placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1
+           focus:ring-brand-500;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400;
+  }
+  .card {
+    @apply rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm;
+  }
+  .badge {
+    @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-medium;
+  }
+  .badge-ok {
+    @apply badge bg-emerald-900/40 text-emerald-300 border border-emerald-800/50;
+  }
+  .badge-warn {
+    @apply badge bg-amber-900/40 text-amber-300 border border-amber-800/50;
+  }
+  .badge-err {
+    @apply badge bg-red-900/40 text-red-300 border border-red-800/50;
+  }
+  .badge-muted {
+    @apply badge bg-slate-800 text-slate-400 border border-slate-700;
+  }
+  .table th {
+    @apply text-left text-xs font-medium uppercase tracking-wide text-slate-400 px-3 py-2;
+  }
+  .table td {
+    @apply px-3 py-2 align-top text-sm text-slate-200;
+  }
+  .table tr {
+    @apply border-b border-slate-800;
+  }
+}
