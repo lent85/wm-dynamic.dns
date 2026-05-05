@@ -1,4 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
+import { runtimeConfigFileSchema } from "@wm-ddns/shared";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -9,6 +12,7 @@ const envSchema = z.object({
     .default("false")
     .transform((v) => v === "true" || v === "1"),
   DATABASE_URL: z.string().default("file:./data/app.db"),
+  RUNTIME_CONFIG_PATH: z.string().optional(),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 chars"),
   APP_ENCRYPTION_KEY: z
     .string()
@@ -30,6 +34,8 @@ export type AppConfig = {
   host: string;
   trustProxy: boolean;
   databaseFile: string;
+  /** Absolute path used for atomic read/write of runtime overrides. */
+  runtimeConfigPath: string;
   jwtSecret: string;
   encryptionKey: Buffer;
   adminUser: string | undefined;
@@ -40,6 +46,24 @@ export type AppConfig = {
   selfDetectIntervalSec: number;
   timezone: string;
 };
+
+export function resolveRuntimeConfigPath(databaseFile: string, envOverride?: string): string {
+  if (envOverride?.trim()) return path.resolve(envOverride.trim());
+  const dir = path.dirname(path.resolve(databaseFile));
+  return path.join(dir, "runtime-config.json");
+}
+
+export function readRuntimeConfigFile(filePath: string): z.infer<typeof runtimeConfigFileSchema> {
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    const raw: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const parsed = runtimeConfigFileSchema.safeParse(raw);
+    if (!parsed.success) return {};
+    return parsed.data;
+  } catch {
+    return {};
+  }
+}
 
 export function loadConfig(): AppConfig {
   const parsed = envSchema.safeParse(process.env);
@@ -53,18 +77,28 @@ export function loadConfig(): AppConfig {
   const dbFile = env.DATABASE_URL.startsWith("file:")
     ? env.DATABASE_URL.slice("file:".length)
     : env.DATABASE_URL;
+  const runtimeConfigPath = resolveRuntimeConfigPath(dbFile, env.RUNTIME_CONFIG_PATH);
+  const rc = readRuntimeConfigFile(runtimeConfigPath);
+
+  const jwtSecret = rc.jwtSecret ?? env.JWT_SECRET;
+  const appEnc = rc.appEncryptionKey ?? env.APP_ENCRYPTION_KEY;
+  const logLevel = rc.logLevel ?? env.LOG_LEVEL;
+  const corsOriginRaw = rc.corsOrigin !== undefined ? rc.corsOrigin : env.CORS_ORIGIN;
+  const corsOrigin = corsOriginRaw?.trim() ? corsOriginRaw.trim() : undefined;
+
   return {
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
     host: env.HOST,
     trustProxy: env.TRUST_PROXY,
     databaseFile: dbFile,
-    jwtSecret: env.JWT_SECRET,
-    encryptionKey: Buffer.from(env.APP_ENCRYPTION_KEY, "hex"),
+    runtimeConfigPath,
+    jwtSecret,
+    encryptionKey: Buffer.from(appEnc, "hex"),
     adminUser: env.ADMIN_USER,
     adminPass: env.ADMIN_PASS,
-    logLevel: env.LOG_LEVEL,
-    corsOrigin: env.CORS_ORIGIN || undefined,
+    logLevel,
+    corsOrigin,
     publicIpProviders: env.PUBLIC_IP_PROVIDERS.split(",")
       .map((s) => s.trim())
       .filter(Boolean),

@@ -30,6 +30,7 @@ import { registerTokenRoutes } from "./routes/tokens.js";
 import { registerLogRoutes } from "./routes/logs.js";
 import { registerStatusRoutes } from "./routes/status.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
+import { registerRuntimeConfigRoutes } from "./routes/runtime-config.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -85,6 +86,11 @@ export async function buildServer(opts: BuildServerOptions): Promise<{
     timezone: config.timezone,
     selfDetectIntervalSec: config.selfDetectIntervalSec,
   });
+
+  const initialSettings = settingsService.get();
+  if (initialSettings.publicIpProviders.length > 0) {
+    publicIpService.setProviders(initialSettings.publicIpProviders);
+  }
 
   if (config.adminUser && config.adminPass && !(await authService.hasAnyUser())) {
     await authService.createUser(config.adminUser, config.adminPass);
@@ -170,6 +176,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<{
   await registerLogRoutes(app);
   await registerStatusRoutes(app);
   await registerSettingsRoutes(app);
+  await registerRuntimeConfigRoutes(app);
 
   await registerStaticSpa(app, config);
 

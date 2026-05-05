@@ -13,6 +13,7 @@ let hostnameId: number;
 beforeAll(async () => {
   fake = registerFakeProvider("e2e-fake");
   const config: AppConfig = {
+    runtimeConfigPath: "/tmp/wm-ddns-test-runtime.json",
     nodeEnv: "test",
     port: 0,
     host: "127.0.0.1",

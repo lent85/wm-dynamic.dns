@@ -31,6 +31,16 @@ export class Scheduler {
       task.stop();
     }
     this.hostnameTasks.clear();
+    this.stopSelfDetectOnly();
+  }
+
+  /** Stops and reschedules the self-IP cron from current DB settings + env fallback. */
+  reloadSelfDetect(): void {
+    this.stopSelfDetectOnly();
+    this.startSelfDetect();
+  }
+
+  private stopSelfDetectOnly(): void {
     if (this.selfDetectTask) {
       this.selfDetectTask.stop();
       this.selfDetectTask = null;
@@ -77,7 +87,7 @@ export class Scheduler {
     }
   }
 
-  private startSelfDetect(): void {
+  startSelfDetect(): void {
     const cfg = this.deps.settingsService.get();
     const intervalSec = cfg.selfDetectEnabled
       ? Math.max(60, cfg.selfDetectIntervalSec || this.deps.selfDetectIntervalSec)

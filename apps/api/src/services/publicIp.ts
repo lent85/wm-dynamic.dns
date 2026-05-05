@@ -18,9 +18,14 @@ export class PublicIpService {
   private cache: PublicIpSnapshot = { ipv4: null, ipv6: null, fetchedAt: null };
 
   constructor(
-    private readonly providers: string[],
+    private providers: string[],
     private readonly logger: { warn: (msg: string, ...rest: unknown[]) => void },
   ) {}
+
+  setProviders(urls: string[]): void {
+    this.providers = [...urls];
+    this.cache = { ipv4: null, ipv6: null, fetchedAt: null };
+  }
 
   snapshot(): PublicIpSnapshot {
     return { ...this.cache };
