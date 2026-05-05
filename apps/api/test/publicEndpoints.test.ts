@@ -22,7 +22,7 @@ beforeAll(async () => {
     jwtSecret: "test-secret-test-secret-test-secret",
     encryptionKey: Buffer.alloc(32, 0xab),
     adminUser: "admin",
-    adminPass: "test-pass-1234",
+    adminPass: "dev-local-1234",
     logLevel: "fatal",
     corsOrigin: undefined,
     publicIpProviders: [],
@@ -36,7 +36,7 @@ beforeAll(async () => {
   const login = await app.inject({
     method: "POST",
     url: "/api/auth/login",
-    payload: { username: "admin", password: "test-pass-1234" },
+    payload: { username: "admin", password: "dev-local-1234" },
   });
   expect(login.statusCode).toBe(200);
   const jwt = JSON.parse(login.body).token as string;

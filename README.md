@@ -53,6 +53,8 @@ Open http://localhost:8080 and sign in.
 
 Requires Node.js 20+ and pnpm.
 
+**Admin login** (after `cp .env.example .env` and first API boot with an empty DB): username `admin`, password `dev-local-1234`. Same values are in `.env.example` as `ADMIN_USER` / `ADMIN_PASS`. Change the password in Settings for anything beyond your machine.
+
 ```bash
 pnpm install
 cp .env.example .env  # set JWT_SECRET + APP_ENCRYPTION_KEY at minimum
