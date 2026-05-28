@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import type { AppSettings, Hostname, IpChangeEvent, ProviderDetail } from "@wm-ddns/shared";
+import type {
+  AppSettings,
+  Hostname,
+  IpChangeEvent,
+  ProviderDetail,
+  UpdateLog,
+} from "@wm-ddns/shared";
 import { api } from "../lib/api.js";
 import { Modal } from "./Providers.js";
 
@@ -175,38 +181,114 @@ function IpHistoryModal({
   hostnameId: number;
   onClose: () => void;
 }) {
-  const history = useQuery({
+  const [showFull, setShowFull] = useState(false);
+
+  const changes = useQuery({
     queryKey: ["ip-history", hostnameId],
     queryFn: () =>
       api<{ items: IpChangeEvent[]; nextCursor: number | null }>(
         `/api/hostnames/${hostnameId}/ip-history?limit=50`,
       ),
+    enabled: !showFull,
   });
+
+  const allRuns = useQuery({
+    queryKey: ["logs", hostnameId, "full"],
+    queryFn: () =>
+      api<{ items: UpdateLog[]; nextCursor: number | null }>(
+        `/api/logs?hostnameId=${hostnameId}&limit=50`,
+      ),
+    enabled: showFull,
+  });
+
+  const loading = showFull ? allRuns.isLoading : changes.isLoading;
+  const error = showFull ? allRuns.error : changes.error;
 
   return (
     <Modal onClose={onClose} title="IP change history">
+      <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-slate-400">
+        <input
+          type="checkbox"
+          className="rounded border-slate-600"
+          checked={showFull}
+          onChange={(e) => setShowFull(e.target.checked)}
+        />
+        Show all update runs (including unchanged IP)
+      </label>
+
       <div className="max-h-[24rem] space-y-2 overflow-y-auto">
-        {history.isLoading && <p className="text-sm text-slate-500">Loading…</p>}
-        {history.data?.items.length === 0 && (
+        {loading && <p className="text-sm text-slate-500">Loading…</p>}
+        {error && (
+          <p className="text-sm text-red-400">
+            {error instanceof Error ? error.message : "Failed to load"}
+          </p>
+        )}
+
+        {!showFull && !loading && changes.data?.items.length === 0 && (
           <p className="text-sm text-slate-500">No IP changes recorded yet.</p>
         )}
-        {history.data?.items.map((e) => (
-          <div
-            key={e.id}
-            className="rounded border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-sm"
-          >
-            <div className="flex justify-between text-slate-400">
-              <span className="badge-muted">{e.recordType}</span>
-              <span>{new Date(e.detectedAt).toLocaleString()}</span>
+        {!showFull &&
+          changes.data?.items.map((e) => (
+            <div
+              key={e.id}
+              className="rounded border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-sm"
+            >
+              <div className="flex justify-between text-slate-400">
+                <span className="badge-muted">{e.recordType}</span>
+                <span>{new Date(e.detectedAt).toLocaleString()}</span>
+              </div>
+              <div className="mt-1 font-mono">
+                {e.previousIp ?? "—"} → {e.newIp}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">source: {e.source}</div>
             </div>
-            <div className="mt-1 font-mono">
-              {e.previousIp ?? "—"} → {e.newIp}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">source: {e.source}</div>
-          </div>
-        ))}
+          ))}
+
+        {showFull && !loading && allRuns.data?.items.length === 0 && (
+          <p className="text-sm text-slate-500">No update runs recorded yet.</p>
+        )}
+        {showFull &&
+          allRuns.data?.items.map((l) => (
+            <UpdateRunRow key={l.id} log={l} />
+          ))}
       </div>
     </Modal>
+  );
+}
+
+function UpdateRunRow({ log }: { log: UpdateLog }) {
+  const ipUnchanged = !log.dispatched && log.providerStatus === "nochg";
+
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        ipUnchanged
+          ? "border-slate-800/80 bg-slate-950/40 opacity-75"
+          : "border-slate-700/60 bg-slate-900/40"
+      }`}
+    >
+      <div className="flex justify-between text-slate-400">
+        <span className="badge-muted">{log.recordType}</span>
+        <span>{new Date(log.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="mt-1 font-mono">{log.requestedIp ?? "—"}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <span>source: {log.source}</span>
+        {log.dispatched ? (
+          <span className="badge-warn">sent</span>
+        ) : (
+          <span className="badge-muted">skipped</span>
+        )}
+        {ipUnchanged ? (
+          <span className="badge-muted">IP unchanged</span>
+        ) : log.dispatched ? (
+          <span className="badge-ok">dispatched</span>
+        ) : null}
+        <span className={log.ok ? "text-slate-500" : "text-red-400"}>
+          {log.providerStatus}
+        </span>
+      </div>
+    </div>
   );
 }
 
