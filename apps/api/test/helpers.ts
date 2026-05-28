@@ -91,7 +91,7 @@ export function seedHostname(
     providerId: number;
     hostname: string;
     recordType?: "A" | "AAAA" | "BOTH";
-    forceIntervalSec?: number;
+    forceIntervalSec?: number | null;
     lastIpv4?: string | null;
     lastIpv6?: string | null;
     lastUpdateAt?: string | null;
@@ -104,7 +104,7 @@ export function seedHostname(
       providerId: opts.providerId,
       recordType: opts.recordType ?? "A",
       ttl: 300,
-      forceIntervalSec: opts.forceIntervalSec ?? 86400,
+      forceIntervalSec: opts.forceIntervalSec !== undefined ? opts.forceIntervalSec : null,
       lastIpv4: opts.lastIpv4 ?? null,
       lastIpv6: opts.lastIpv6 ?? null,
       lastUpdateAt: opts.lastUpdateAt ?? null,

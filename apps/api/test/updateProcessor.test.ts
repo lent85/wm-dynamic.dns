@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { UpdateProcessor } from "../src/services/updateProcessor.js";
-import { hostnames, updateLogs } from "../src/db/schema.js";
+import { SettingsService } from "../src/services/settings.js";
+import { IpHistoryService } from "../src/services/ipHistory.js";
+import { hostnames, updateLogs, ipChangeEvents } from "../src/db/schema.js";
 import {
   makeTestDb,
   registerFakeProvider,
@@ -27,6 +29,8 @@ beforeEach(() => {
     db,
     encryptionKey: TEST_KEY,
     logger: silentLogger,
+    settingsService: new SettingsService(db),
+    ipHistory: new IpHistoryService(db),
     now: () => now,
   });
 });
@@ -130,6 +134,45 @@ describe("UpdateProcessor", () => {
     });
     expect(out.results).toHaveLength(0);
     expect(fake.calls).toHaveLength(0);
+  });
+
+  it("records IP change history when IP changes and dispatch succeeds", async () => {
+    const id = seedHostname(db, {
+      providerId,
+      hostname: "hist.example.com",
+      lastIpv4: "1.1.1.1",
+      lastUpdateAt: now.toISOString(),
+    });
+    await processor.process({
+      hostnameId: id,
+      source: "manual",
+      ipv4: "2.2.2.2",
+    });
+    const events = db.select().from(ipChangeEvents).all();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      hostnameId: id,
+      recordType: "A",
+      previousIp: "1.1.1.1",
+      newIp: "2.2.2.2",
+      source: "manual",
+    });
+  });
+
+  it("does not record IP history when IP unchanged", async () => {
+    const id = seedHostname(db, {
+      providerId,
+      hostname: "same.example.com",
+      lastIpv4: "1.2.3.4",
+      lastUpdateAt: new Date(now.getTime() - 90_000_000).toISOString(),
+      forceIntervalSec: 86400,
+    });
+    await processor.process({
+      hostnameId: id,
+      source: "force-refresh",
+      ipv4: "1.2.3.4",
+    });
+    expect(db.select().from(ipChangeEvents).all()).toHaveLength(0);
   });
 
   it("serializes concurrent updates for the same hostname (mutex)", async () => {

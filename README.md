@@ -11,7 +11,13 @@ It applies sensible **update strategies** out of the box:
 - **Skip if unchanged** — caches the last-known IP per hostname; if the new IP
   is identical, the upstream provider is **not** called.
 - **Force interval** — even when the IP did not change, push an update once
-  per interval (default: 24h) so providers do not expire records.
+  per interval (global default: 60 minutes, configurable per hostname) so
+  providers do not expire records. A server-side job re-detects public IP and
+  refreshes DNS on schedule.
+- **IP change history** — per-hostname timeline of successful IP changes
+  (not every `nochg` attempt).
+- **Public IP consensus** — optional parallel queries to multiple
+  what-is-my-ip services; requires minimum agreement before updating.
 - **Per-hostname mutex** — a client push and a scheduler tick can never race.
 
 ## Features
@@ -22,9 +28,13 @@ It applies sensible **update strategies** out of the box:
   - `GET /update?token=...&domains=...&ip=auto` — DuckDNS-style.
   - `GET /nic/update?hostname=...&myip=...` with HTTP Basic Auth — dyndns2-style.
 - Per-hostname cron schedule (server-side push) in any IANA timezone.
-- Optional self-IP detect job: server resolves its own public IP from a chain
-  of providers (`ipify`, `ifconfig.co`, `icanhazip`, configurable) with a 60s
-  cache and applies it to hostnames flagged `track-self-ip`.
+- Optional self-IP detect job: server resolves its own public IP from
+  configurable providers (`ipify`, `ifconfig.co`, `icanhazip`, …) using
+  **failover** or **consensus** mode, with a 60s cache; applies to hostnames
+  flagged `track-self-ip`.
+- Global force-refresh job (every minute): for each enabled hostname whose
+  force interval has elapsed, re-detect public IP and push to the upstream DNS
+  provider (even if the IP is unchanged).
 - IPv4 + IPv6 support (A and AAAA records).
 - AES-256-GCM encryption of provider credentials at rest.
 - Rate limiting on public endpoints.
@@ -88,6 +98,18 @@ All configuration is via environment variables. See [`.env.example`](.env.exampl
 | `TZ`                       | `UTC`                         | IANA timezone for cron schedules. Set to `Asia/Ho_Chi_Minh` for VN.   |
 | `PUBLIC_IP_PROVIDERS`      | ipify,ifconfig.co,icanhazip   | Comma-separated URLs returning plain text IP.                         |
 | `SELF_DETECT_INTERVAL_SEC` | `300`                         | `0` to disable.                                                       |
+| `DEFAULT_FORCE_INTERVAL_SEC` | `3600`                      | Global default force refresh (seconds). Min 60. UI: 60/120/180 min presets. |
+
+### Global vs per-hostname settings (admin UI)
+
+| Setting | Scope | Notes |
+| ------- | ----- | ----- |
+| Default TTL / force interval | Global | Applied to new hostnames; force interval can be inherited per entry (`null`). |
+| `forceIntervalSec = 0` on a hostname | Per entry | Disables periodic force for that hostname (updates only when IP changes). |
+| Public IP providers / detection mode | Global | Consensus (default) or failover; minimum agreements for consensus. |
+| Self-detect interval | Global | How often to poll public IP for `track-self-ip` hostnames. |
+| Schedule cron | Per hostname | Optional extra push schedule. |
+| IP change history retention | Global | Days to keep `ip_change_events` (default 90). |
 
 ## Client examples
 
@@ -123,6 +145,7 @@ flowchart LR
   client["DDNS clients"] -->|"GET /update or /nic/update"| api[Fastify API]
   scheduler["node-cron tick"] --> svc[updateProcessor]
   selfDetect["self-IP detect job"] --> svc
+  forceJob["force-refresh job"] --> svc
   api --> svc
   svc --> mutex["per-hostname mutex"]
   mutex --> cache{"IP changed OR force-interval exceeded?"}
@@ -134,6 +157,7 @@ flowchart LR
   tech --> log2[("update_logs")]
   duck --> log2
   svc --> db[("SQLite (better-sqlite3)")]
+  svc --> ipHist[("ip_change_events")]
 ```
 
 ## Adding a new DNS provider
