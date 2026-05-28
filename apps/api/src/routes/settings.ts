@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { appSettingsUpdateRequestSchema } from "@wm-ddns/shared";
+import { appSettingsUpdateRequestSchema, getEnabledPublicIpProviderUrls } from "@wm-ddns/shared";
 import { validateCron } from "../utils/cron.js";
 
 export async function registerSettingsRoutes(app: FastifyInstance): Promise<void> {
@@ -12,8 +12,8 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const parsed = appSettingsUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const next = settings.update(parsed.data);
-    publicIp.setProviders(next.publicIpProviders);
-    scheduler.reloadSelfDetect();
+    publicIp.setProviders(getEnabledPublicIpProviderUrls(next));
+    scheduler.reloadFromSettings();
     return next;
   });
 

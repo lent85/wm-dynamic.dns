@@ -8,6 +8,7 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import fastifySensible from "@fastify/sensible";
 import fastifyFormbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
+import { getEnabledPublicIpProviderUrls } from "@wm-ddns/shared";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db/index.js";
 import { runMigrations } from "./db/migrate.js";
@@ -20,6 +21,7 @@ import { SettingsService } from "./services/settings.js";
 import { PublicIpService } from "./services/publicIp.js";
 import { UpdateProcessor } from "./services/updateProcessor.js";
 import { Scheduler } from "./services/scheduler.js";
+import { IpHistoryService } from "./services/ipHistory.js";
 import type { AppContext } from "./app-context.js";
 
 import { registerPublicRoutes } from "./routes/public.js";
@@ -70,27 +72,34 @@ export async function buildServer(opts: BuildServerOptions): Promise<{
   const hostnameService = new HostnameService(db, config.timezone);
   const tokenService = new TokenService(db);
   const logService = new LogService(db);
-  const settingsService = new SettingsService(db);
+  const settingsService = new SettingsService(db, {
+    defaultForceIntervalSec: config.defaultForceIntervalSec,
+  });
+  const ipHistoryService = new IpHistoryService(db);
   const publicIpService = new PublicIpService(config.publicIpProviders, logger);
   const updateProcessor = new UpdateProcessor({
     db,
     encryptionKey: config.encryptionKey,
     logger,
+    settingsService,
+    ipHistory: ipHistoryService,
+    envDefaultForceIntervalSec: config.defaultForceIntervalSec,
   });
   const scheduler = new Scheduler({
     hostnameService,
     updateProcessor,
     publicIpService,
     settingsService,
+    ipHistory: ipHistoryService,
     logger,
     timezone: config.timezone,
     selfDetectIntervalSec: config.selfDetectIntervalSec,
+    envDefaultForceIntervalSec: config.defaultForceIntervalSec,
   });
 
   const initialSettings = settingsService.get();
-  if (initialSettings.publicIpProviders.length > 0) {
-    publicIpService.setProviders(initialSettings.publicIpProviders);
-  }
+  publicIpService.applySettings(initialSettings);
+  publicIpService.setProviders(getEnabledPublicIpProviderUrls(initialSettings));
 
   if (config.adminUser && config.adminPass && !(await authService.hasAnyUser())) {
     await authService.createUser(config.adminUser, config.adminPass);
@@ -109,6 +118,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<{
       tokens: tokenService,
       logs: logService,
       settings: settingsService,
+      ipHistory: ipHistoryService,
       publicIp: publicIpService,
       updateProcessor,
       scheduler,

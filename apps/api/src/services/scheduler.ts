@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from "node-cron";
 import type { FastifyBaseLogger } from "fastify";
+import { getEnabledPublicIpProviderUrls } from "@wm-ddns/shared";
 import type { HostnameService } from "./hostnames.js";
 import type { PublicIpService } from "./publicIp.js";
 import type { UpdateProcessor } from "./updateProcessor.js";
@@ -51,9 +52,7 @@ export class Scheduler {
     if (typeof publicIp.applySettings === "function") {
       publicIp.applySettings(settings);
     }
-    if (Array.isArray(settings.publicIpProviders) && settings.publicIpProviders.length > 0) {
-      publicIp.setProviders(settings.publicIpProviders);
-    }
+    publicIp.setProviders(getEnabledPublicIpProviderUrls(settings));
   }
 
   private stopSelfDetectOnly(): void {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import type {
   AppSettings,
+  PublicIpServiceConfig,
   RuntimeConfigPublic,
   RuntimeConfigPutResponse,
   RuntimeConfigUpdateRequest,
@@ -11,6 +12,7 @@ import { api } from "../lib/api.js";
 
 const SECTION_IDS = {
   application: "settings-application",
+  externalIp: "settings-external-ip",
   runtime: "settings-runtime",
   password: "settings-password",
 } as const;
@@ -19,6 +21,25 @@ function randomHex(bytes: number): string {
   const a = new Uint8Array(bytes);
   crypto.getRandomValues(a);
   return [...a].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function createIpServiceDraft(index: number): PublicIpServiceConfig {
+  return {
+    id: `custom-${Date.now()}-${index}`,
+    name: `Service ${index + 1}`,
+    url: "",
+    enabled: true,
+  };
+}
+
+function updateIpService(
+  form: AppSettings,
+  setForm: (next: AppSettings) => void,
+  index: number,
+  patch: Partial<PublicIpServiceConfig>,
+): void {
+  const next = form.publicIpServices.map((svc, i) => (i === index ? { ...svc, ...patch } : svc));
+  setForm({ ...form, publicIpServices: next });
 }
 
 function scrollToSection(id: string): void {
@@ -229,6 +250,9 @@ export function SettingsPage() {
         <button type="button" className="btn-ghost justify-start text-left" onClick={() => scrollToSection(SECTION_IDS.application)}>
           Application defaults
         </button>
+        <button type="button" className="btn-ghost justify-start text-left" onClick={() => scrollToSection(SECTION_IDS.externalIp)}>
+          External IP services
+        </button>
         <button type="button" className="btn-ghost justify-start text-left" onClick={() => scrollToSection(SECTION_IDS.runtime)}>
           Runtime / server
         </button>
@@ -260,11 +284,15 @@ export function SettingsPage() {
               <input
                 className="input"
                 type="number"
+                min={60}
                 value={form.defaultForceIntervalSec}
                 onChange={(e) =>
                   setForm({ ...form, defaultForceIntervalSec: Number(e.target.value) })
                 }
               />
+              <p className="mt-1 text-xs text-slate-500">
+                Hostnames with “use global default” inherit this (e.g. 3600 = 60 min, 7200 = 2 h).
+              </p>
             </div>
           </div>
 
@@ -289,20 +317,115 @@ export function SettingsPage() {
             />
           </div>
           <div>
-            <label className="label">Public IP providers (one per line)</label>
-            <textarea
-              className="input min-h-[6rem]"
-              value={form.publicIpProviders.join("\n")}
+            <label className="label">Public IP detection mode</label>
+            <select
+              className="input"
+              value={form.publicIpDetectionMode}
               onChange={(e) =>
                 setForm({
                   ...form,
-                  publicIpProviders: e.target.value
-                    .split("\n")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
+                  publicIpDetectionMode: e.target.value as AppSettings["publicIpDetectionMode"],
                 })
               }
+            >
+              <option value="consensus">Consensus (parallel, require agreement)</option>
+              <option value="failover">Failover (try URLs in order)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Minimum provider agreements (consensus)</label>
+            <input
+              className="input"
+              type="number"
+              min={2}
+              max={10}
+              value={form.publicIpMinAgreements}
+              onChange={(e) =>
+                setForm({ ...form, publicIpMinAgreements: Number(e.target.value) })
+              }
             />
+          </div>
+          <div>
+            <label className="label">IP change history retention (days)</label>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              value={form.ipHistoryRetentionDays}
+              onChange={(e) =>
+                setForm({ ...form, ipHistoryRetentionDays: Number(e.target.value) })
+              }
+            />
+          </div>
+        </section>
+
+        <section
+          id={SECTION_IDS.externalIp}
+          className="card scroll-mt-6 space-y-4"
+        >
+          <div className="text-base font-medium">External IP detection services</div>
+          <p className="text-sm text-slate-400">
+            Manage upstream services used for public IP detection. Only enabled services are used by
+            the detection engine.
+          </p>
+          <div className="space-y-3">
+            {form.publicIpServices.map((svc, idx) => (
+              <div key={svc.id} className="grid grid-cols-1 gap-2 rounded border border-slate-800 p-3 md:grid-cols-12">
+                <label className="flex items-center gap-2 text-sm text-slate-300 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={svc.enabled}
+                    onChange={(e) =>
+                      updateIpService(form, setForm, idx, { enabled: e.target.checked })
+                    }
+                  />
+                  Enabled
+                </label>
+                <input
+                  className="input md:col-span-3"
+                  placeholder="Service name"
+                  value={svc.name}
+                  onChange={(e) =>
+                    updateIpService(form, setForm, idx, { name: e.target.value })
+                  }
+                />
+                <input
+                  className="input md:col-span-6"
+                  placeholder="https://example.com/ip"
+                  value={svc.url}
+                  onChange={(e) =>
+                    updateIpService(form, setForm, idx, { url: e.target.value })
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn-danger md:col-span-1"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      publicIpServices: form.publicIpServices.filter((_, i) => i !== idx),
+                    })
+                  }
+                  disabled={form.publicIpServices.length <= 1}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() =>
+                setForm({
+                  ...form,
+                  publicIpServices: [...form.publicIpServices, createIpServiceDraft(form.publicIpServices.length)],
+                })
+              }
+            >
+              Add service
+            </button>
           </div>
         </section>
 
