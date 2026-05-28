@@ -4,26 +4,32 @@ import type { HostnameService } from "./hostnames.js";
 import type { PublicIpService } from "./publicIp.js";
 import type { UpdateProcessor } from "./updateProcessor.js";
 import type { SettingsService } from "./settings.js";
+import type { IpHistoryService } from "./ipHistory.js";
+import { isForceDue, resolveForceIntervalSec } from "../utils/forceInterval.js";
 
 interface SchedulerDeps {
   hostnameService: HostnameService;
   updateProcessor: UpdateProcessor;
   publicIpService: PublicIpService;
   settingsService: SettingsService;
+  ipHistory: IpHistoryService;
   logger: FastifyBaseLogger;
   timezone: string;
   selfDetectIntervalSec: number;
+  envDefaultForceIntervalSec: number;
 }
 
 export class Scheduler {
   private readonly hostnameTasks = new Map<number, { expr: string; task: ScheduledTask }>();
   private selfDetectTask: ScheduledTask | null = null;
+  private forceRefreshTask: ScheduledTask | null = null;
 
   constructor(private readonly deps: SchedulerDeps) {}
 
   start(): void {
     this.syncHostnameTasks();
     this.startSelfDetect();
+    this.startForceRefresh();
   }
 
   stop(): void {
@@ -32,12 +38,21 @@ export class Scheduler {
     }
     this.hostnameTasks.clear();
     this.stopSelfDetectOnly();
+    this.stopForceRefreshOnly();
   }
 
-  /** Stops and reschedules the self-IP cron from current DB settings + env fallback. */
   reloadSelfDetect(): void {
     this.stopSelfDetectOnly();
     this.startSelfDetect();
+  }
+
+  reloadFromSettings(): void {
+    this.reloadSelfDetect();
+    const settings = this.deps.settingsService.get();
+    this.deps.publicIpService.applySettings(settings);
+    if (settings.publicIpProviders.length > 0) {
+      this.deps.publicIpService.setProviders(settings.publicIpProviders);
+    }
   }
 
   private stopSelfDetectOnly(): void {
@@ -47,10 +62,13 @@ export class Scheduler {
     }
   }
 
-  /**
-   * Recomputes the cron task set against the DB. Idempotent. Call after any
-   * hostname mutation that may affect schedules.
-   */
+  private stopForceRefreshOnly(): void {
+    if (this.forceRefreshTask) {
+      this.forceRefreshTask.stop();
+      this.forceRefreshTask = null;
+    }
+  }
+
   syncHostnameTasks(): void {
     const wanted = this.deps.hostnameService.listScheduled();
     const wantedById = new Map(wanted.map((h) => [h.id, h]));
@@ -108,6 +126,17 @@ export class Scheduler {
     this.deps.logger.info({ expr, tz: this.deps.timezone }, "self-IP detect job scheduled");
   }
 
+  startForceRefresh(): void {
+    this.forceRefreshTask = cron.schedule(
+      "* * * * *",
+      () => {
+        void this.runForceRefreshTick();
+      },
+      { timezone: this.deps.timezone, scheduled: true },
+    );
+    this.deps.logger.info({ tz: this.deps.timezone }, "force-refresh job scheduled (every minute)");
+  }
+
   async runSelfDetectTick(): Promise<void> {
     const tracked = this.deps.hostnameService.listSelfTracked();
     if (tracked.length === 0) return;
@@ -116,6 +145,7 @@ export class Scheduler {
       this.deps.logger.warn("self-detect: could not resolve any public IP");
       return;
     }
+    const consensusJson = ip.consensus ? JSON.stringify(ip.consensus) : null;
     for (const h of tracked) {
       try {
         await this.deps.updateProcessor.process({
@@ -123,6 +153,7 @@ export class Scheduler {
           source: "self-detect",
           ipv4: ip.ipv4,
           ipv6: ip.ipv6,
+          consensusJson,
         });
       } catch (err) {
         this.deps.logger.error(
@@ -133,16 +164,65 @@ export class Scheduler {
     }
   }
 
+  async runForceRefreshTick(): Promise<void> {
+    const settings = this.deps.settingsService.get();
+    const now = new Date();
+    const due = this.deps.hostnameService.listEnabled().filter((h) => {
+      const forceSec = resolveForceIntervalSec(
+        h.forceIntervalSec,
+        settings,
+        this.deps.envDefaultForceIntervalSec,
+      );
+      return isForceDue(h.lastUpdateAt, forceSec, now);
+    });
+
+    if (due.length === 0) return;
+
+    const ip = await this.deps.publicIpService.detect(true);
+    if (!ip.ipv4 && !ip.ipv6) {
+      this.deps.logger.warn("force-refresh: public IP detection failed");
+      return;
+    }
+
+    const consensusJson = ip.consensus ? JSON.stringify(ip.consensus) : null;
+
+    for (const h of due) {
+      try {
+        await this.deps.updateProcessor.process({
+          hostnameId: h.id,
+          source: "force-refresh",
+          ipv4: ip.ipv4,
+          ipv6: ip.ipv6,
+          consensusJson,
+        });
+      } catch (err) {
+        this.deps.logger.error(
+          { err, hostnameId: h.id },
+          "force-refresh tick failed for hostname",
+        );
+      }
+    }
+
+    const pruned = this.deps.ipHistory.pruneOlderThan(settings.ipHistoryRetentionDays);
+    if (pruned > 0) {
+      this.deps.logger.info({ pruned }, "pruned old IP change events");
+    }
+  }
+
   private async runScheduledTick(hostnameId: number): Promise<void> {
     const h = this.deps.hostnameService.get(hostnameId);
     if (!h || !h.enabled) return;
     let ipv4: string | null = h.lastIpv4;
     let ipv6: string | null = h.lastIpv6;
+    let consensusJson: string | null = null;
 
     if (h.trackSelfIp || (!ipv4 && !ipv6)) {
-      const ip = await this.deps.publicIpService.detect();
+      // Scheduled runs should use a fresh probe; stale cache can hide recent IP flips
+      // and make schedule behave differently from manual force-update.
+      const ip = await this.deps.publicIpService.detect(true);
       ipv4 = ip.ipv4;
       ipv6 = ip.ipv6;
+      consensusJson = ip.consensus ? JSON.stringify(ip.consensus) : null;
     }
     try {
       await this.deps.updateProcessor.process({
@@ -150,6 +230,7 @@ export class Scheduler {
         source: "schedule",
         ipv4,
         ipv6,
+        consensusJson,
       });
     } catch (err) {
       this.deps.logger.error(
