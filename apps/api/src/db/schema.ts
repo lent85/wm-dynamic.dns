@@ -44,7 +44,8 @@ export const hostnames = sqliteTable(
     /** "A" | "AAAA" | "BOTH" */
     recordType: text("record_type").notNull().default("A"),
     ttl: integer("ttl").notNull().default(300),
-    forceIntervalSec: integer("force_interval_sec").notNull().default(86400),
+    /** null = inherit global defaultForceIntervalSec */
+    forceIntervalSec: integer("force_interval_sec"),
     /** Cron expression in IANA timezone of TZ env. Null = no schedule. */
     scheduleCron: text("schedule_cron"),
     trackSelfIp: integer("track_self_ip", { mode: "boolean" }).notNull().default(false),
@@ -120,6 +121,30 @@ export const settings = sqliteTable("settings", {
     .default(sql`(datetime('now'))`),
 });
 
+export const ipChangeEvents = sqliteTable(
+  "ip_change_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    hostnameId: integer("hostname_id")
+      .notNull()
+      .references(() => hostnames.id, { onDelete: "cascade" }),
+    recordType: text("record_type").notNull(),
+    previousIp: text("previous_ip"),
+    newIp: text("new_ip").notNull(),
+    source: text("source").notNull(),
+    consensusJson: text("consensus_json"),
+    detectedAt: text("detected_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    hostnameDetectedIdx: index("ip_change_events_hostname_detected_idx").on(
+      t.hostnameId,
+      t.detectedAt,
+    ),
+  }),
+);
+
 export const adminAudit = sqliteTable(
   "admin_audit",
   {
@@ -144,4 +169,5 @@ export type Provider = typeof providers.$inferSelect;
 export type Hostname = typeof hostnames.$inferSelect;
 export type ClientToken = typeof clientTokens.$inferSelect;
 export type UpdateLog = typeof updateLogs.$inferSelect;
+export type IpChangeEvent = typeof ipChangeEvents.$inferSelect;
 export type Setting = typeof settings.$inferSelect;

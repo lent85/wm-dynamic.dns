@@ -5,4 +5,5 @@ export * from "./schemas/token.js";
 export * from "./schemas/log.js";
 export * from "./schemas/status.js";
 export * from "./schemas/settings.js";
+export * from "./schemas/ip-history.js";
 export * from "./schemas/runtime-config.js";

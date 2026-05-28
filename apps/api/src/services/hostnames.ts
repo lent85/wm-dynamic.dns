@@ -11,7 +11,7 @@ export interface HostnameRow {
   providerType?: string;
   recordType: string;
   ttl: number;
-  forceIntervalSec: number;
+  forceIntervalSec: number | null;
   scheduleCron: string | null;
   trackSelfIp: boolean;
   enabled: boolean;
@@ -79,7 +79,7 @@ export class HostnameService {
     providerId: number;
     recordType: "A" | "AAAA" | "BOTH";
     ttl: number;
-    forceIntervalSec: number;
+    forceIntervalSec: number | null;
     scheduleCron: string | null;
     trackSelfIp: boolean;
     enabled: boolean;
@@ -104,7 +104,7 @@ export class HostnameService {
           providerId: input.providerId,
           recordType: input.recordType,
           ttl: input.ttl,
-          forceIntervalSec: input.forceIntervalSec,
+          forceIntervalSec: input.forceIntervalSec ?? null,
           scheduleCron: input.scheduleCron,
           trackSelfIp: input.trackSelfIp,
           enabled: input.enabled,
@@ -127,7 +127,7 @@ export class HostnameService {
       providerId: number;
       recordType: "A" | "AAAA" | "BOTH";
       ttl: number;
-      forceIntervalSec: number;
+      forceIntervalSec: number | null;
       scheduleCron: string | null;
       trackSelfIp: boolean;
       enabled: boolean;
@@ -173,6 +173,10 @@ export class HostnameService {
 
   listSelfTracked(): HostnameRow[] {
     return this.list().filter((h) => h.enabled && h.trackSelfIp);
+  }
+
+  listEnabled(): HostnameRow[] {
+    return this.list().filter((h) => h.enabled);
   }
 }
 

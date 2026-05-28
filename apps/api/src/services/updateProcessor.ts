@@ -1,19 +1,24 @@
 import { eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import type { UpdateSource } from "@wm-ddns/shared";
+import type { AppSettings, UpdateSource } from "@wm-ddns/shared";
 import type { Db } from "../db/index.js";
 import { hostnames, providers, updateLogs } from "../db/schema.js";
 import { decryptJSON } from "../crypto/encrypt.js";
 import { getProvider } from "../providers/registry.js";
 import type { DnsRecordType } from "../providers/types.js";
 import { isIPv4, isIPv6 } from "../utils/ip.js";
+import { resolveForceIntervalSec } from "../utils/forceInterval.js";
 import { KeyedMutex } from "./mutex.js";
+import type { IpHistoryService } from "./ipHistory.js";
+import type { SettingsService } from "./settings.js";
 
 export interface ProcessUpdateInput {
   hostnameId: number;
   source: UpdateSource;
   ipv4?: string | null;
   ipv6?: string | null;
+  /** Serialized consensus metadata from public IP detect (optional). */
+  consensusJson?: string | null;
 }
 
 export interface RecordUpdateOutcome {
@@ -36,6 +41,9 @@ interface UpdateProcessorDeps {
   db: Db;
   encryptionKey: Buffer;
   logger: FastifyBaseLogger;
+  settingsService: SettingsService;
+  ipHistory: IpHistoryService;
+  envDefaultForceIntervalSec?: number;
   /** Override "now" in tests. */
   now?: () => Date;
 }
@@ -52,8 +60,13 @@ export class UpdateProcessor {
     return this.mutex.run(input.hostnameId, () => this.processInner(input));
   }
 
+  private getSettings(): AppSettings {
+    return this.deps.settingsService.get();
+  }
+
   private async processInner(input: ProcessUpdateInput): Promise<ProcessUpdateOutput> {
     const { db, logger } = this.deps;
+    const settings = this.getSettings();
 
     const hostRow = db
       .select()
@@ -98,13 +111,19 @@ export class UpdateProcessor {
       throw new Error(`provider ${providerRow.id} config is corrupted`);
     }
 
+    const forceSec = resolveForceIntervalSec(
+      hostRow.forceIntervalSec,
+      settings,
+      this.deps.envDefaultForceIntervalSec,
+    );
+    const forceMs = forceSec * 1000;
+
     const results: RecordUpdateOutcome[] = [];
 
     for (const target of targets) {
       const lastIp = target.recordType === "A" ? hostRow.lastIpv4 : hostRow.lastIpv6;
       const lastUpdate = hostRow.lastUpdateAt ? new Date(hostRow.lastUpdateAt) : null;
       const ageMs = lastUpdate ? this.now().getTime() - lastUpdate.getTime() : Infinity;
-      const forceMs = hostRow.forceIntervalSec * 1000;
 
       const ipUnchanged = lastIp === target.ip;
       const forceDue = !lastUpdate || (forceMs > 0 && ageMs >= forceMs);
@@ -161,6 +180,18 @@ export class UpdateProcessor {
       });
 
       if (outcome.ok) {
+        if (!ipUnchanged) {
+          this.deps.ipHistory.record({
+            hostnameId: hostRow.id,
+            recordType: target.recordType,
+            previousIp: lastIp,
+            newIp: target.ip,
+            source: input.source,
+            consensusJson: input.consensusJson ?? null,
+            detectedAt: this.now().toISOString(),
+          });
+        }
+
         const ipv4 = target.recordType === "A" ? target.ip : hostRow.lastIpv4;
         const ipv6 = target.recordType === "AAAA" ? target.ip : hostRow.lastIpv6;
         db
@@ -174,7 +205,6 @@ export class UpdateProcessor {
           })
           .where(eq(hostnames.id, hostRow.id))
           .run();
-        // mutate local copy so subsequent target in the same call sees fresh state
         if (target.recordType === "A") hostRow.lastIpv4 = target.ip;
         else hostRow.lastIpv6 = target.ip;
         hostRow.lastUpdateAt = this.now().toISOString();

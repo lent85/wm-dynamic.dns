@@ -25,6 +25,7 @@ const envSchema = z.object({
     .string()
     .default("https://api.ipify.org,https://ifconfig.co/ip,https://icanhazip.com"),
   SELF_DETECT_INTERVAL_SEC: z.coerce.number().int().min(0).default(300),
+  DEFAULT_FORCE_INTERVAL_SEC: z.coerce.number().int().min(60).max(604800).default(3600),
   TZ: z.string().default("UTC"),
 });
 
@@ -44,6 +45,7 @@ export type AppConfig = {
   corsOrigin: string | undefined;
   publicIpProviders: string[];
   selfDetectIntervalSec: number;
+  defaultForceIntervalSec: number;
   timezone: string;
 };
 
@@ -103,6 +105,7 @@ export function loadConfig(): AppConfig {
       .map((s) => s.trim())
       .filter(Boolean),
     selfDetectIntervalSec: env.SELF_DETECT_INTERVAL_SEC,
+    defaultForceIntervalSec: env.DEFAULT_FORCE_INTERVAL_SEC,
     timezone: env.TZ,
   };
 }

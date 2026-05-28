@@ -116,6 +116,66 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    id: "0002_force_interval_nullable_ip_history",
+    up: (db) => {
+      const sqlite = db.$client;
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS ip_change_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          hostname_id INTEGER NOT NULL REFERENCES hostnames(id) ON DELETE CASCADE,
+          record_type TEXT NOT NULL,
+          previous_ip TEXT,
+          new_ip TEXT NOT NULL,
+          source TEXT NOT NULL,
+          consensus_json TEXT,
+          detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS ip_change_events_hostname_detected_idx
+          ON ip_change_events(hostname_id, detected_at);
+      `);
+
+      const cols = sqlite
+        .prepare("PRAGMA table_info(hostnames)")
+        .all() as Array<{ name: string; notnull: number }>;
+      const forceCol = cols.find((c) => c.name === "force_interval_sec");
+      if (forceCol && forceCol.notnull === 1) {
+        sqlite.exec(`
+          CREATE TABLE hostnames_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hostname TEXT NOT NULL,
+            provider_id INTEGER NOT NULL REFERENCES providers(id) ON DELETE RESTRICT,
+            record_type TEXT NOT NULL DEFAULT 'A',
+            ttl INTEGER NOT NULL DEFAULT 300,
+            force_interval_sec INTEGER,
+            schedule_cron TEXT,
+            track_self_ip INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_ipv4 TEXT,
+            last_ipv6 TEXT,
+            last_update_at TEXT,
+            last_status TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO hostnames_new (
+            id, hostname, provider_id, record_type, ttl, force_interval_sec,
+            schedule_cron, track_self_ip, enabled, last_ipv4, last_ipv6,
+            last_update_at, last_status, created_at, updated_at
+          )
+          SELECT
+            id, hostname, provider_id, record_type, ttl, force_interval_sec,
+            schedule_cron, track_self_ip, enabled, last_ipv4, last_ipv6,
+            last_update_at, last_status, created_at, updated_at
+          FROM hostnames;
+          DROP TABLE hostnames;
+          ALTER TABLE hostnames_new RENAME TO hostnames;
+          CREATE UNIQUE INDEX IF NOT EXISTS hostnames_hostname_unique ON hostnames(hostname);
+          CREATE INDEX IF NOT EXISTS hostnames_provider_idx ON hostnames(provider_id);
+        `);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Db): { applied: string[] } {

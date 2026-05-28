@@ -11,7 +11,8 @@ export const hostnameSchema = z.object({
   providerType: z.string().optional(),
   recordType: recordTypeSchema,
   ttl: z.number().int().min(30).max(86400),
-  forceIntervalSec: z.number().int().min(0),
+  /** null = inherit global defaultForceIntervalSec */
+  forceIntervalSec: z.number().int().min(0).nullable(),
   scheduleCron: z.string().nullable(),
   trackSelfIp: z.boolean(),
   enabled: z.boolean(),
@@ -33,8 +34,9 @@ export const hostnameCreateRequestSchema = z.object({
     .regex(/^[a-zA-Z0-9._-]+$/, "Only letters, digits, dot, dash, underscore are allowed"),
   providerId: z.number().int(),
   recordType: recordTypeSchema.default("A"),
-  ttl: z.number().int().min(30).max(86400).default(300),
-  forceIntervalSec: z.number().int().min(0).default(86400),
+  ttl: z.number().int().min(30).max(86400).optional(),
+  /** Omit or null to inherit global default */
+  forceIntervalSec: z.number().int().min(0).nullable().optional(),
   scheduleCron: z.string().nullable().default(null),
   trackSelfIp: z.boolean().default(false),
   enabled: z.boolean().default(true),

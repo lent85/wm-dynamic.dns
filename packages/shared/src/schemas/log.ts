@@ -6,6 +6,7 @@ export const updateSourceSchema = z.enum([
   "schedule",
   "self-detect",
   "manual",
+  "force-refresh",
 ]);
 
 export type UpdateSource = z.infer<typeof updateSourceSchema>;

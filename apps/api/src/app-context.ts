@@ -7,6 +7,7 @@ import type { HostnameService } from "./services/hostnames.js";
 import type { TokenService } from "./services/tokens.js";
 import type { LogService } from "./services/logs.js";
 import type { SettingsService } from "./services/settings.js";
+import type { IpHistoryService } from "./services/ipHistory.js";
 import type { PublicIpService } from "./services/publicIp.js";
 import type { UpdateProcessor } from "./services/updateProcessor.js";
 import type { Scheduler } from "./services/scheduler.js";
@@ -23,6 +24,7 @@ export interface AppContext {
     tokens: TokenService;
     logs: LogService;
     settings: SettingsService;
+    ipHistory: IpHistoryService;
     publicIp: PublicIpService;
     updateProcessor: UpdateProcessor;
     scheduler: Scheduler;
