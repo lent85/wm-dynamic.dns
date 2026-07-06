@@ -93,7 +93,7 @@ export function HostnamesPage() {
               <th>Schedule</th>
               <th>Force</th>
               <th>Track self IP</th>
-              <th>Last update</th>
+              <th>IP History (Last 4)</th>
               <th></th>
             </tr>
           </thead>
@@ -110,13 +110,39 @@ export function HostnamesPage() {
                   {formatForceInterval(h.forceIntervalSec, defaultForceSec)}
                 </td>
                 <td>{h.trackSelfIp ? <span className="badge-ok">yes</span> : "—"}</td>
-                <td className="text-slate-500">
-                  {h.lastUpdateAt ? new Date(h.lastUpdateAt).toLocaleString() : "—"}
-                  {(h.lastIpv4 || h.lastIpv6) && (
-                    <div className="font-mono text-xs text-slate-600">
-                      {h.lastIpv4 ?? "—"}
-                      {h.lastIpv6 ? ` / ${h.lastIpv6}` : ""}
+                <td className="py-2">
+                  {h.recentIpHistory && h.recentIpHistory.length > 0 ? (
+                    <div className="space-y-1">
+                      {h.recentIpHistory.slice(0, 4).map((item, idx) => (
+                        <div
+                          key={item.id}
+                          className={`flex items-center justify-between gap-4 text-xs ${
+                            idx === 0 ? "text-emerald-400 font-medium" : "text-slate-500"
+                          }`}
+                        >
+                          <span className="font-mono">
+                            <span className="text-[10px] text-slate-500 bg-slate-800 px-1 py-0.5 rounded mr-1">
+                              {item.recordType}
+                            </span>
+                            {item.newIp}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {new Date(item.detectedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
                     </div>
+                  ) : h.lastIpv4 || h.lastIpv6 ? (
+                    <div className="flex items-center justify-between gap-4 text-xs text-emerald-400 font-medium">
+                      <span className="font-mono">
+                        {h.lastIpv4 || h.lastIpv6}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {h.lastUpdateAt ? new Date(h.lastUpdateAt).toLocaleString() : "—"}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-500">—</span>
                   )}
                 </td>
                 <td className="space-x-2 whitespace-nowrap text-right">

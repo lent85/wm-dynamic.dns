@@ -20,6 +20,7 @@ export const updateLogSchema = z.object({
   requestedIp: z.string().nullable(),
   dispatched: z.boolean(),
   ok: z.boolean(),
+  ipChanged: z.boolean(),
   providerStatus: z.string().nullable(),
   responseText: z.string().nullable(),
   durationMs: z.number().int().nullable(),
@@ -33,6 +34,7 @@ export const updateLogQuerySchema = z.object({
   source: updateSourceSchema.optional(),
   ok: z.coerce.boolean().optional(),
   dispatched: z.coerce.boolean().optional(),
+  ipChanged: z.coerce.boolean().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
   cursor: z.coerce.number().int().optional(),
 });

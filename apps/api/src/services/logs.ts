@@ -11,6 +11,7 @@ export class LogService {
     source?: UpdateSource;
     ok?: boolean;
     dispatched?: boolean;
+    ipChanged?: boolean;
     limit: number;
     cursor?: number;
   }): UpdateLogPage {
@@ -22,6 +23,8 @@ export class LogService {
     if (input.ok !== undefined) conditions.push(eq(updateLogs.ok, input.ok));
     if (input.dispatched !== undefined)
       conditions.push(eq(updateLogs.dispatched, input.dispatched));
+    if (input.ipChanged !== undefined)
+      conditions.push(eq(updateLogs.ipChanged, input.ipChanged));
     if (input.cursor !== undefined) conditions.push(lt(updateLogs.id, input.cursor));
 
     const whereExpr = conditions.length > 0 ? and(...conditions) : undefined;
@@ -44,6 +47,7 @@ export class LogService {
       requestedIp: l.requestedIp,
       dispatched: l.dispatched,
       ok: l.ok,
+      ipChanged: l.ipChanged,
       providerStatus: l.providerStatus,
       responseText: l.responseText,
       durationMs: l.durationMs,

@@ -17,7 +17,7 @@ export function LogsPage() {
     hostnameId: "",
     source: "" as UpdateSource | "",
     dispatched: "",
-    ok: "",
+    result: "ip_update",
   });
 
   const hostnames = useQuery({
@@ -30,7 +30,13 @@ export function LogsPage() {
   if (filter.hostnameId) params.set("hostnameId", filter.hostnameId);
   if (filter.source) params.set("source", filter.source);
   if (filter.dispatched) params.set("dispatched", filter.dispatched);
-  if (filter.ok) params.set("ok", filter.ok);
+  if (filter.result === "ok") {
+    params.set("ok", "true");
+  } else if (filter.result === "failed") {
+    params.set("ok", "false");
+  } else if (filter.result === "ip_update") {
+    params.set("ipChanged", "true");
+  }
 
   const logs = useQuery({
     queryKey: ["logs", params.toString()],
@@ -97,12 +103,13 @@ export function LogsPage() {
             <label className="label">Result</label>
             <select
               className="input"
-              value={filter.ok}
-              onChange={(e) => setFilter({ ...filter, ok: e.target.value })}
+              value={filter.result}
+              onChange={(e) => setFilter({ ...filter, result: e.target.value })}
             >
               <option value="">Any</option>
-              <option value="true">OK</option>
-              <option value="false">Failed</option>
+              <option value="ok">OK</option>
+              <option value="failed">Failed</option>
+              <option value="ip_update">IP Update</option>
             </select>
           </div>
         </div>

@@ -71,6 +71,7 @@ describe("UpdateProcessor", () => {
     const logs = db.select().from(updateLogs).all();
     expect(logs).toHaveLength(1);
     expect(logs[0]?.dispatched).toBe(false);
+    expect(logs[0]?.responseText).toContain("Detected IP: 1.2.3.4 (matches last IP: 1.2.3.4). Skipped.");
   });
 
   it("dispatches anyway after force-interval elapses even if ip unchanged", async () => {
@@ -88,6 +89,10 @@ describe("UpdateProcessor", () => {
     });
     expect(out.results[0]?.dispatched).toBe(true);
     expect(fake.calls).toHaveLength(1);
+    const logs = db.select().from(updateLogs).all();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.dispatched).toBe(true);
+    expect(logs[0]?.responseText).toContain("Detected IP: 1.2.3.4 (matches last IP: 1.2.3.4 (force interval due)). Response: ok");
   });
 
   it("does not advance last_ip on provider failure (so retry can happen)", async () => {

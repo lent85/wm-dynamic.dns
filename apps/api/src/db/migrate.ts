@@ -176,6 +176,15 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    id: "0003_update_logs_ip_changed",
+    up: (db) => {
+      const sqlite = db.$client;
+      sqlite.exec(`
+        ALTER TABLE update_logs ADD COLUMN ip_changed INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Db): { applied: string[] } {

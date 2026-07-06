@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import type { Db } from "../db/index.js";
-import { hostnames, providers } from "../db/schema.js";
+import { hostnames, providers, ipChangeEvents } from "../db/schema.js";
 import { validateCron } from "../utils/cron.js";
+import type { RecentIpChange } from "@wm-ddns/shared";
 
 export interface HostnameRow {
   id: number;
@@ -21,6 +22,7 @@ export interface HostnameRow {
   lastStatus: string | null;
   createdAt: string;
   updatedAt: string;
+  recentIpHistory?: RecentIpChange[];
 }
 
 export class HostnameService {
@@ -39,11 +41,27 @@ export class HostnameService {
       .from(hostnames)
       .innerJoin(providers, eq(hostnames.providerId, providers.id))
       .all();
-    return rows.map(({ h, providerName, providerType }) => ({
-      ...h,
-      providerName,
-      providerType,
-    }));
+    return rows.map(({ h, providerName, providerType }) => {
+      const recent = this.db
+        .select()
+        .from(ipChangeEvents)
+        .where(eq(ipChangeEvents.hostnameId, h.id))
+        .orderBy(desc(ipChangeEvents.id))
+        .limit(4)
+        .all();
+      return {
+        ...h,
+        providerName,
+        providerType,
+        recentIpHistory: recent.map((r) => ({
+          id: r.id,
+          recordType: r.recordType as "A" | "AAAA",
+          previousIp: r.previousIp,
+          newIp: r.newIp,
+          detectedAt: r.detectedAt,
+        })),
+      };
+    });
   }
 
   get(id: number): HostnameRow | null {
@@ -57,7 +75,28 @@ export class HostnameService {
       .innerJoin(providers, eq(hostnames.providerId, providers.id))
       .where(eq(hostnames.id, id))
       .get();
-    return r ? { ...r.h, providerName: r.providerName, providerType: r.providerType } : null;
+    if (!r) return null;
+
+    const recent = this.db
+      .select()
+      .from(ipChangeEvents)
+      .where(eq(ipChangeEvents.hostnameId, r.h.id))
+      .orderBy(desc(ipChangeEvents.id))
+      .limit(4)
+      .all();
+
+    return {
+      ...r.h,
+      providerName: r.providerName,
+      providerType: r.providerType,
+      recentIpHistory: recent.map((item) => ({
+        id: item.id,
+        recordType: item.recordType as "A" | "AAAA",
+        previousIp: item.previousIp,
+        newIp: item.newIp,
+        detectedAt: item.detectedAt,
+      })),
+    };
   }
 
   findByName(hostname: string): HostnameRow | null {
@@ -71,7 +110,28 @@ export class HostnameService {
       .innerJoin(providers, eq(hostnames.providerId, providers.id))
       .where(eq(hostnames.hostname, hostname))
       .get();
-    return r ? { ...r.h, providerName: r.providerName, providerType: r.providerType } : null;
+    if (!r) return null;
+
+    const recent = this.db
+      .select()
+      .from(ipChangeEvents)
+      .where(eq(ipChangeEvents.hostnameId, r.h.id))
+      .orderBy(desc(ipChangeEvents.id))
+      .limit(4)
+      .all();
+
+    return {
+      ...r.h,
+      providerName: r.providerName,
+      providerType: r.providerType,
+      recentIpHistory: recent.map((item) => ({
+        id: item.id,
+        recordType: item.recordType as "A" | "AAAA",
+        previousIp: item.previousIp,
+        newIp: item.newIp,
+        detectedAt: item.detectedAt,
+      })),
+    };
   }
 
   create(input: {

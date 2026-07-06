@@ -32,11 +32,11 @@ export function ProvidersPage() {
     <div className="space-y-6">
       <div className="flex items-baseline justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Dynamic DNS Provider Service</h1>
           <p className="text-sm text-slate-400">DNS upstreams the gateway pushes updates to.</p>
         </div>
         <button className="btn-primary" onClick={() => setEditing({ kind: "create" })}>
-          Add provider
+          Add service
         </button>
       </div>
 
@@ -132,7 +132,7 @@ function ProviderForm({
       });
     },
     onSuccess: () => {
-      toast.success(isEdit ? "provider updated" : "provider created");
+      toast.success(isEdit ? "provider service updated" : "provider service created");
       void qc.invalidateQueries({ queryKey: ["providers"] });
       onClose();
     },
@@ -140,7 +140,7 @@ function ProviderForm({
   });
 
   return (
-    <Modal onClose={onClose} title={isEdit ? "Edit provider" : "New provider"}>
+    <Modal onClose={onClose} title={isEdit ? "Edit provider service" : "New provider service"}>
       <div className="space-y-4">
         <div>
           <label className="label">Type</label>

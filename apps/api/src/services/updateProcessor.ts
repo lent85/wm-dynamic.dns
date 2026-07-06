@@ -130,6 +130,7 @@ export class UpdateProcessor {
       const shouldDispatch = !ipUnchanged || forceDue;
 
       if (!shouldDispatch) {
+        const detailMsg = `Service: ${providerRow.name} (${providerRow.type}). Detected IP: ${target.ip} (matches last IP: ${lastIp ?? "none"}). Skipped.`;
         this.writeLog({
           hostnameId: hostRow.id,
           source: input.source,
@@ -137,8 +138,9 @@ export class UpdateProcessor {
           requestedIp: target.ip,
           dispatched: false,
           ok: true,
+          ipChanged: false,
           providerStatus: "nochg",
-          responseText: "ip unchanged within force interval",
+          responseText: detailMsg,
           durationMs: 0,
         });
         results.push({
@@ -167,6 +169,12 @@ export class UpdateProcessor {
       }
       const durationMs = Date.now() - startedAt;
 
+      const ipChanged = outcome.ok && !ipUnchanged;
+      const ipChangeMsg = ipUnchanged
+        ? `matches last IP: ${lastIp ?? "none"} (force interval due)`
+        : `changed from last IP: ${lastIp ?? "none"}`;
+      const detailMsg = `Service: ${providerRow.name} (${providerRow.type}). Detected IP: ${target.ip} (${ipChangeMsg}). Response: ${outcome.raw}`;
+
       this.writeLog({
         hostnameId: hostRow.id,
         source: input.source,
@@ -174,8 +182,9 @@ export class UpdateProcessor {
         requestedIp: target.ip,
         dispatched: true,
         ok: outcome.ok,
+        ipChanged,
         providerStatus: outcome.status,
-        responseText: outcome.raw,
+        responseText: detailMsg,
         durationMs,
       });
 
@@ -252,6 +261,7 @@ export class UpdateProcessor {
     requestedIp: string | null;
     dispatched: boolean;
     ok: boolean;
+    ipChanged: boolean;
     providerStatus: string;
     responseText: string;
     durationMs: number;
@@ -265,6 +275,7 @@ export class UpdateProcessor {
         requestedIp: row.requestedIp,
         dispatched: row.dispatched,
         ok: row.ok,
+        ipChanged: row.ipChanged,
         providerStatus: row.providerStatus,
         responseText: row.responseText.slice(0, 1024),
         durationMs: row.durationMs,

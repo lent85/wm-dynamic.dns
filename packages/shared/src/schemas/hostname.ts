@@ -3,6 +3,16 @@ import { z } from "zod";
 export const recordTypeSchema = z.enum(["A", "AAAA", "BOTH"]);
 export type RecordType = z.infer<typeof recordTypeSchema>;
 
+export const recentIpChangeSchema = z.object({
+  id: z.number().int(),
+  recordType: z.enum(["A", "AAAA"]),
+  previousIp: z.string().nullable(),
+  newIp: z.string(),
+  detectedAt: z.string(),
+});
+
+export type RecentIpChange = z.infer<typeof recentIpChangeSchema>;
+
 export const hostnameSchema = z.object({
   id: z.number().int(),
   hostname: z.string(),
@@ -22,6 +32,7 @@ export const hostnameSchema = z.object({
   lastStatus: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  recentIpHistory: z.array(recentIpChangeSchema).optional(),
 });
 
 export type Hostname = z.infer<typeof hostnameSchema>;

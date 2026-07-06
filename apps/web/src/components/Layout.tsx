@@ -5,7 +5,7 @@ import { setToken } from "../lib/api.js";
 const navItems = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/hostnames", label: "Hostnames" },
-  { to: "/providers", label: "Providers" },
+  { to: "/providers", label: "Dynamic DNS Provider Service" },
   { to: "/tokens", label: "API Tokens" },
   { to: "/logs", label: "Logs" },
   { to: "/settings", label: "Settings" },

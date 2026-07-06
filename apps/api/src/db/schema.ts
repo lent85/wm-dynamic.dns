@@ -100,6 +100,7 @@ export const updateLogs = sqliteTable(
     requestedIp: text("requested_ip"),
     dispatched: integer("dispatched", { mode: "boolean" }).notNull(),
     ok: integer("ok", { mode: "boolean" }).notNull(),
+    ipChanged: integer("ip_changed", { mode: "boolean" }).notNull().default(false),
     providerStatus: text("provider_status"),
     responseText: text("response_text"),
     durationMs: integer("duration_ms"),
