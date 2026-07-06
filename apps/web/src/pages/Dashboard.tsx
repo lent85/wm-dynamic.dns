@@ -79,9 +79,7 @@ export function DashboardPage() {
                 <th>Hostname</th>
                 <th>Provider</th>
                 <th>Type</th>
-                <th>Last IPv4</th>
-                <th>Last IPv6</th>
-                <th>Last update</th>
+                <th>Latest Records</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -95,12 +93,40 @@ export function DashboardPage() {
                   <td>
                     <span className="badge-muted">{h.recordType}</span>
                   </td>
-                  <td className="font-mono text-xs">{h.lastIpv4 ?? "—"}</td>
-                  <td className="font-mono text-xs">{h.lastIpv6 ?? "—"}</td>
-                  <td className="text-slate-400">
-                    {h.lastUpdateAt
-                      ? new Date(h.lastUpdateAt).toLocaleString()
-                      : "—"}
+                  <td className="py-2">
+                    {h.recentIpHistory && h.recentIpHistory.length > 0 ? (
+                      <div className="space-y-1">
+                        {h.recentIpHistory.slice(0, 4).map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className={`flex items-center justify-between gap-4 text-xs ${
+                              idx === 0 ? "text-emerald-400 font-medium" : "text-slate-500"
+                            }`}
+                          >
+                            <span className="font-mono">
+                              <span className="text-[10px] text-slate-500 bg-slate-800 px-1 py-0.5 rounded mr-1">
+                                {item.recordType}
+                              </span>
+                              {item.newIp}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(item.detectedAt).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : h.lastIpv4 || h.lastIpv6 ? (
+                      <div className="flex items-center justify-between gap-4 text-xs text-emerald-400 font-medium">
+                        <span className="font-mono">
+                          {h.lastIpv4 || h.lastIpv6}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          {h.lastUpdateAt ? new Date(h.lastUpdateAt).toLocaleString() : "—"}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </td>
                   <td>
                     <StatusBadge status={h.lastStatus} enabled={h.enabled} />
@@ -109,7 +135,7 @@ export function DashboardPage() {
               ))}
               {hostnames.data && hostnames.data.items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
                     No hostnames yet. Add one in the Hostnames tab.
                   </td>
                 </tr>
