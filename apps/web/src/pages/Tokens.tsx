@@ -215,11 +215,11 @@ function CreateTokenForm({
   );
 }
 
-function IssuedTokenModal({
+export function IssuedTokenModal({
   token,
   onClose,
 }: {
-  token: ClientTokenCreateResponse;
+  token: { plainToken: string };
   onClose: () => void;
 }) {
   const origin = window.location.origin;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import type {
@@ -7,9 +7,11 @@ import type {
   IpChangeEvent,
   ProviderDetail,
   UpdateLog,
+  ClientToken,
 } from "@wm-ddns/shared";
 import { api } from "../lib/api.js";
 import { Modal } from "./Providers.js";
+import { IssuedTokenModal } from "./Tokens.js";
 
 const FORCE_PRESETS = [
   { label: "60 min", sec: 3600 },
@@ -334,6 +336,22 @@ function HostnameForm({
   const [inheritForce, setInheritForce] = useState(
     existing ? existing.forceIntervalSec == null : true,
   );
+
+  const [ipMode, setIpMode] = useState<"self" | "url" | "domain" | "token">(() => {
+    if (!existing) return "self";
+    if (existing.trackSelfIp) return "self";
+    if (existing.ipSourceUrl) return "url";
+    if (existing.ipSourceDomain) return "domain";
+    return "token";
+  });
+
+  const [newToken, setNewToken] = useState<{ plainToken: string } | null>(null);
+
+  const tokens = useQuery({
+    queryKey: ["tokens"],
+    queryFn: () => api<{ items: ClientToken[] }>("/api/tokens"),
+  });
+
   const [form, setForm] = useState({
     hostname: existing?.hostname ?? "",
     providerId: existing?.providerId ?? providers[0]?.id ?? 0,
@@ -342,9 +360,28 @@ function HostnameForm({
     forceIntervalSec:
       existing?.forceIntervalSec ?? appSettings.defaultForceIntervalSec,
     scheduleCron: existing?.scheduleCron ?? "",
-    trackSelfIp: existing?.trackSelfIp ?? false,
+    ipSourceUrl: existing?.ipSourceUrl ?? "",
+    ipSourceDomain: existing?.ipSourceDomain ?? "",
+    selectedTokenIds: [] as number[],
+    newTokenLabel: "",
     enabled: existing?.enabled ?? true,
   });
+
+  useEffect(() => {
+    if (isEdit && existing && tokens.data) {
+      const associated = tokens.data.items
+        .filter((t) => t.scopeHostnameIds.includes(existing.id))
+        .map((t) => t.id);
+      setForm((prev) => ({ ...prev, selectedTokenIds: associated }));
+    }
+  }, [tokens.data, isEdit, existing]);
+
+  let sourceError: string | null = null;
+  if (ipMode === "url" && !form.ipSourceUrl.trim()) {
+    sourceError = "API URL is required when using custom API update mode.";
+  } else if (ipMode === "domain" && !form.ipSourceDomain.trim()) {
+    sourceError = "Domain to follow is required when using follow domain mode.";
+  }
 
   const validateCron = useMutation({
     mutationFn: (expr: string) =>
@@ -363,24 +400,54 @@ function HostnameForm({
         ttl: form.ttl,
         forceIntervalSec: inheritForce ? null : form.forceIntervalSec,
         scheduleCron: form.scheduleCron.trim() === "" ? null : form.scheduleCron.trim(),
-        trackSelfIp: form.trackSelfIp,
+        trackSelfIp: ipMode === "self",
+        ipSourceUrl: ipMode === "url" ? form.ipSourceUrl.trim() || null : null,
+        ipSourceDomain: ipMode === "domain" ? form.ipSourceDomain.trim() || null : null,
         enabled: form.enabled,
+        associatedTokenIds: ipMode === "token" ? form.selectedTokenIds : [],
+        createAssociatedTokenLabel:
+          ipMode === "token" && form.newTokenLabel.trim() ? form.newTokenLabel.trim() : undefined,
       };
       if (isEdit && existing) {
-        return api(`/api/hostnames/${existing.id}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
+        return api<{ newAssociatedToken?: { plainToken: string; label: string } }>(
+          `/api/hostnames/${existing.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+        );
       }
-      return api("/api/hostnames", { method: "POST", body: JSON.stringify(payload) });
+      return api<{ newAssociatedToken?: { plainToken: string; label: string } }>(
+        "/api/hostnames",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success(isEdit ? "hostname updated" : "hostname created");
-      void qc.invalidateQueries({ queryKey: ["hostnames"] });
-      onClose();
+      if (data?.newAssociatedToken) {
+        setNewToken(data.newAssociatedToken);
+      } else {
+        void qc.invalidateQueries({ queryKey: ["hostnames"] });
+        onClose();
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  if (newToken) {
+    return (
+      <IssuedTokenModal
+        token={newToken}
+        onClose={() => {
+          void qc.invalidateQueries({ queryKey: ["hostnames"] });
+          onClose();
+        }}
+      />
+    );
+  }
 
   return (
     <Modal onClose={onClose} title={isEdit ? "Edit hostname" : "New hostname"}>
@@ -527,24 +594,150 @@ function HostnameForm({
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={form.trackSelfIp}
-              onChange={(e) => setForm({ ...form, trackSelfIp: e.target.checked })}
-            />
-            Track server's own public IP
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-            />
-            Enabled
-          </label>
+
+        {/* ── IP Update Mode ───────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <label className="label">IP update mode</label>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: "self", label: "🖥️ Server public IP", desc: "Detect this server's own IP" },
+              { value: "url", label: "🌐 Custom API URL", desc: "Fetch IP from a URL" },
+              { value: "domain", label: "🔗 Follow domain", desc: "Resolve A/AAAA of a domain" },
+              { value: "token", label: "🔑 API token push", desc: "Client pushes via token" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setIpMode(opt.value)}
+                className={`rounded border px-3 py-2 text-left text-sm transition-colors ${
+                  ipMode === opt.value
+                    ? "border-brand-400 bg-brand-400/10 text-brand-300"
+                    : "border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-500"
+                }`}
+              >
+                <div className="font-medium">{opt.label}</div>
+                <div className="mt-0.5 text-[11px] text-slate-500">{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Mode: Server public IP */}
+          {ipMode === "self" && (
+            <p className="text-xs text-slate-400">
+              The server will detect its own public IP every{" "}
+              <span className="font-mono">{appSettings.selfDetectIntervalSec ?? 300}s</span>{" "}
+              and automatically push the update.
+            </p>
+          )}
+
+          {/* Mode: Custom API URL */}
+          {ipMode === "url" && (
+            <div>
+              <label className="label">API URL (returns plain-text IP)</label>
+              <input
+                className="input"
+                value={form.ipSourceUrl}
+                onChange={(e) => setForm({ ...form, ipSourceUrl: e.target.value })}
+                placeholder="https://api.ipify.org"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                The server will fetch this URL on each detect cycle. The response must be a
+                plain-text IPv4 or IPv6 address.
+              </p>
+            </div>
+          )}
+
+          {/* Mode: Follow domain */}
+          {ipMode === "domain" && (
+            <div>
+              <label className="label">Domain to follow</label>
+              <input
+                className="input"
+                value={form.ipSourceDomain}
+                onChange={(e) => setForm({ ...form, ipSourceDomain: e.target.value })}
+                placeholder="myrouter.asuscomm.com"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                The server will resolve the A/AAAA records of this domain and use the first
+                result as the target IP on each detect cycle.
+              </p>
+            </div>
+          )}
+
+          {/* Mode: API Token push */}
+          {ipMode === "token" && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400">
+                An external client (router / cron / ddclient) pushes the IP via the server's
+                own update API using an API token. The server does not actively detect the IP.
+              </p>
+
+              {/* Existing tokens */}
+              {tokens.data && tokens.data.items.length > 0 && (
+                <div>
+                  <label className="label">Associate existing tokens</label>
+                  <div className="max-h-36 space-y-1 overflow-auto rounded border border-slate-700 bg-slate-950 p-2">
+                    {tokens.data.items.map((t) => {
+                      const isGlobal = t.scopeHostnameIds.length === 0;
+                      return (
+                        <label key={t.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            disabled={isGlobal}
+                            checked={isGlobal || form.selectedTokenIds.includes(t.id)}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                selectedTokenIds: e.target.checked
+                                  ? [...form.selectedTokenIds, t.id]
+                                  : form.selectedTokenIds.filter((id) => id !== t.id),
+                              })
+                            }
+                          />
+                          <span className="font-mono">{t.label}</span>
+                          {isGlobal && (
+                            <span className="badge-warn text-[10px]">global</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Create new token */}
+              <div>
+                <label className="label">Or generate a new token for this hostname</label>
+                <input
+                  className="input"
+                  value={form.newTokenLabel}
+                  onChange={(e) => setForm({ ...form, newTokenLabel: e.target.value })}
+                  placeholder={`token-${form.hostname || "hostname"}`}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Leave blank to skip. If filled, a new token scoped to this hostname will be
+                  created and displayed after saving.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {sourceError && (
+            <p className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              ⚠️ {sourceError}
+            </p>
+          )}
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={form.enabled}
+            onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+
         <div className="flex justify-end gap-2 pt-2">
           <button className="btn-ghost" onClick={onClose}>
             Cancel
@@ -552,7 +745,7 @@ function HostnameForm({
           <button
             className="btn-primary"
             onClick={() => save.mutate()}
-            disabled={save.isPending}
+            disabled={save.isPending || !!sourceError}
           >
             {save.isPending ? "Saving…" : "Save"}
           </button>

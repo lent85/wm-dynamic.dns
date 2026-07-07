@@ -185,6 +185,23 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    id: "0004_hostname_custom_ip_sources",
+    up: (db) => {
+      const sqlite = db.$client;
+      // Check if columns already exist (idempotent guard)
+      const cols = sqlite
+        .prepare("PRAGMA table_info(hostnames)")
+        .all() as Array<{ name: string }>;
+      const names = new Set(cols.map((c) => c.name));
+      if (!names.has("ip_source_url")) {
+        sqlite.exec(`ALTER TABLE hostnames ADD COLUMN ip_source_url TEXT;`);
+      }
+      if (!names.has("ip_source_domain")) {
+        sqlite.exec(`ALTER TABLE hostnames ADD COLUMN ip_source_domain TEXT;`);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Db): { applied: string[] } {

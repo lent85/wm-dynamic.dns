@@ -49,6 +49,16 @@ export const hostnames = sqliteTable(
     /** Cron expression in IANA timezone of TZ env. Null = no schedule. */
     scheduleCron: text("schedule_cron"),
     trackSelfIp: integer("track_self_ip", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Custom URL to fetch the current IP from (e.g. https://api.ipify.org).
+     * Used when trackSelfIp=false and the source is an external HTTP endpoint.
+     */
+    ipSourceUrl: text("ip_source_url"),
+    /**
+     * Domain whose A/AAAA records are resolved to obtain the current IP.
+     * Used when trackSelfIp=false and the source is another domain (CNAME-follow).
+     */
+    ipSourceDomain: text("ip_source_domain"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     lastIpv4: text("last_ipv4"),
     lastIpv6: text("last_ipv6"),

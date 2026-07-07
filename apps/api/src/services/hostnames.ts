@@ -15,6 +15,10 @@ export interface HostnameRow {
   forceIntervalSec: number | null;
   scheduleCron: string | null;
   trackSelfIp: boolean;
+  /** Pull IP from this URL when trackSelfIp=false. */
+  ipSourceUrl: string | null;
+  /** Resolve A/AAAA of this domain when trackSelfIp=false. */
+  ipSourceDomain: string | null;
   enabled: boolean;
   lastIpv4: string | null;
   lastIpv6: string | null;
@@ -142,6 +146,8 @@ export class HostnameService {
     forceIntervalSec: number | null;
     scheduleCron: string | null;
     trackSelfIp: boolean;
+    ipSourceUrl?: string | null;
+    ipSourceDomain?: string | null;
     enabled: boolean;
   }): HostnameRow {
     const provider = this.db
@@ -167,6 +173,8 @@ export class HostnameService {
           forceIntervalSec: input.forceIntervalSec ?? null,
           scheduleCron: input.scheduleCron,
           trackSelfIp: input.trackSelfIp,
+          ipSourceUrl: input.ipSourceUrl ?? null,
+          ipSourceDomain: input.ipSourceDomain ?? null,
           enabled: input.enabled,
         })
         .returning()
@@ -190,6 +198,8 @@ export class HostnameService {
       forceIntervalSec: number | null;
       scheduleCron: string | null;
       trackSelfIp: boolean;
+      ipSourceUrl: string | null;
+      ipSourceDomain: string | null;
       enabled: boolean;
     }>,
   ): HostnameRow | null {
@@ -233,6 +243,18 @@ export class HostnameService {
 
   listSelfTracked(): HostnameRow[] {
     return this.list().filter((h) => h.enabled && h.trackSelfIp);
+  }
+
+  /**
+   * Returns all enabled hostnames that pull their IP from a custom URL or by
+   * resolving another domain — i.e. trackSelfIp=false but have a configured
+   * ipSourceUrl or ipSourceDomain. These are processed by the self-detect
+   * tick alongside server-IP hostnames.
+   */
+  listOtherTracked(): HostnameRow[] {
+    return this.list().filter(
+      (h) => h.enabled && !h.trackSelfIp && !!(h.ipSourceUrl || h.ipSourceDomain),
+    );
   }
 
   listEnabled(): HostnameRow[] {

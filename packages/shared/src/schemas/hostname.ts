@@ -25,6 +25,10 @@ export const hostnameSchema = z.object({
   forceIntervalSec: z.number().int().min(0).nullable(),
   scheduleCron: z.string().nullable(),
   trackSelfIp: z.boolean(),
+  /** Pull IP from this URL (e.g. https://api.ipify.org). Used when trackSelfIp=false. */
+  ipSourceUrl: z.string().nullable().optional(),
+  /** Resolve A/AAAA of this domain to get the IP. Used when trackSelfIp=false. */
+  ipSourceDomain: z.string().nullable().optional(),
   enabled: z.boolean(),
   lastIpv4: z.string().nullable(),
   lastIpv6: z.string().nullable(),
@@ -49,13 +53,34 @@ export const hostnameCreateRequestSchema = z.object({
   /** Omit or null to inherit global default */
   forceIntervalSec: z.number().int().min(0).nullable().optional(),
   scheduleCron: z.string().nullable().default(null),
-  trackSelfIp: z.boolean().default(false),
+  /** Defaults to true so new hostnames immediately track the server's own public IP. */
+  trackSelfIp: z.boolean().default(true),
+  /** Custom URL to pull the current public IP from. Only used when trackSelfIp=false. */
+  ipSourceUrl: z.string().nullable().optional(),
+  /** Domain whose DNS A/AAAA is resolved to get the current IP. Only used when trackSelfIp=false. */
+  ipSourceDomain: z.string().nullable().optional(),
   enabled: z.boolean().default(true),
+  /**
+   * IDs of existing client tokens to associate (add this hostname to their scope).
+   * Used when trackSelfIp=false and the update mode is "push via token".
+   */
+  associatedTokenIds: z.array(z.number().int()).optional(),
+  /**
+   * If provided, create a new client token with this label scoped to this hostname.
+   * The plain token value will be returned in the response as `newAssociatedToken`.
+   */
+  createAssociatedTokenLabel: z.string().optional(),
 });
 
 export type HostnameCreateRequest = z.infer<typeof hostnameCreateRequestSchema>;
 
-export const hostnameUpdateRequestSchema = hostnameCreateRequestSchema.partial();
+export const hostnameUpdateRequestSchema = hostnameCreateRequestSchema
+  .omit({ createAssociatedTokenLabel: true })
+  .extend({
+    /** Same as create — generate a new token scoped to this hostname. */
+    createAssociatedTokenLabel: z.string().optional(),
+  })
+  .partial();
 export type HostnameUpdateRequest = z.infer<typeof hostnameUpdateRequestSchema>;
 
 export const forceUpdateRequestSchema = z.object({
